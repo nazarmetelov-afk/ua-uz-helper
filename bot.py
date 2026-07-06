@@ -1,11 +1,62 @@
 import telebot
 from telebot import types
+import requests
+from bs4 import BeautifulSoup
+import re
 
-# ⚠️ ВСТАВТЕ СВІЙ ТОКЕН СЮДИ (отриманий від @BotFather)
-TOKEN = "8816399169:AAEeCdexznbCh4vTKqBWqE8gRYTqWIspWV0"
+TOKEN = "ВАШ_ТОКЕН_БОТА"
 bot = telebot.TeleBot(TOKEN)
 
-# Головне меню
+# Функция автоматического парсинга с сайта vagon.by
+def parse_vagon_by(model_name):
+    # Формируем чистый URL (убираем лишние пробелы)
+    model_cleaned = model_name.strip()
+    url = f"https://vagon.by/model/{model_cleaned}"
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    
+    try:
+        response = requests.get(url, headers=headers, timeout=5)
+        if response.status_code != 200:
+            return None
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Находим главный заголовок (название вагона)
+        title_tag = soup.find('h1')
+        title = title_tag.text.strip() if title_tag else f"Вагон моделі {model_name}"
+        
+        # Находим таблицу с техническими характеристиками
+        table = soup.find('table', {'class': 'table'}) # ищем таблицу характеристик
+        if not table:
+            # Если класс таблицы другой, ищем просто первую попавшуюся таблицу
+            table = soup.find('table')
+            
+        if torch := table:
+            rows = torch.find_all('tr')
+            details = []
+            for row in rows:
+                cols = row.find_all(['td', 'th'])
+                if len(cols) == 2:
+                    key = cols[0].text.strip()
+                    val = cols[1].text.strip()
+                    # Убираем лишние пробелы и переносы строк внутри текста
+                    val = re.sub(r'\s+', ' ', val)
+                    details.append(f"• **{key}:** {val}")
+            
+            if details:
+                characteristics = "\n".join(details[:10]) # берем первые 10 главных характеристик
+                return f"🚛 **{title}**\n\n📊 **Технічні характеристики з сайту vagon.by:**\n{characteristics}\n\n🔗 [Посилання на джерело]({url})"
+        
+        return f"🚛 **{title}**\n\nДанні на сайті є, але не вдалося автоматично прочитати таблицю характеристик.\n🔗 [Відкрити на сайті]({url})"
+        
+    except Exception as e:
+        print(f"Ошибка парсинга: {e}")
+        return None
+
+# Главное меню
 def get_main_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     btn1 = types.KeyboardButton("📄 Аварійні картки")
@@ -17,73 +68,46 @@ def get_main_menu():
     markup.add(btn1, btn2, btn3, btn4, btn5, btn6)
     return markup
 
-# Команда /start
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     welcome_text = "🚆 **ЖД Помічник UA** вітає вас!\n\nОберіть потрібний розділ меню нижче для початку роботи:"
     bot.send_message(message.chat.id, welcome_text, reply_markup=get_main_menu(), parse_mode="Markdown")
 
-# Обробка текстових кнопок та пошуку
 @bot.message_handler(content_types=['text'])
 def handle_text(message):
     text = message.text.strip()
 
     if text == "📄 Аварійні картки":
-        bot.send_message(message.chat.id, "Введіть номер аварійної картки (наприклад, 328):")
-    
+        bot.send_message(message.chat.id, "Введіть номер аварійної картки (например, 328):")
+        return
     elif text == "☣️ Небезпечні вантажі (UN)":
-        bot.send_message(message.chat.id, "Введіть номер ООН (наприклад, UN 1075):")
-        
+        bot.send_message(message.chat.id, "Введіть номер ООН (например, 1075):")
+        return
     elif text == "🚛 Вагони та цистерни":
-        bot.send_message(message.chat.id, "Розділ бази даних моделей вагонів (у розробці).")
+        bot.send_message(message.chat.id, "Введіть модель цистерни або вагона (наприклад: `15-1443` або `15-150-04`):", parse_mode="Markdown")
+        return
+
+    # Проверка: если текст похож на модель вагона (содержит дефис, например 15-1443)
+    if "-" in text and len(text) >= 5:
+        bot.send_message(message.chat.id, f"🔍 Шукаю модель `{text}` на vagon.by...", parse_mode="Markdown")
         
-    elif text == "📷 Розпізнати фото":
-        bot.send_message(message.chat.id, "Надішліть мені чітке фото цистерни або вагона, де видно номер чи маркування.")
-        
-    elif text == "🧮 Калькулятор":
-        bot.send_message(message.chat.id, "Функція розрахунку заповнення цистерн з'явиться найближчим часом.")
-        
-    elif text == "❓ Запитати ШІ":
-        bot.send_message(message.chat.id, "Напишіть своє складне запитання щодо правил перевезень, і ШІ спробує допомогти.")
-        
-    # Приклад пошуку аварійної картки 328
-    elif text == "328":
-        response = (
-            "📋 **Аварійна картка №328**\n\n"
-            "• **Назва вантажу:** Гази вуглеводневі зріджені\n"
-            "• **Основні небезпеки:** Вогненебезпечно, вибухонебезпечно при нагріванні, задушлива дія.\n"
-            "• **Дії при аварії:** Евакуювати людей, усунути джерела вогню, охолоджувати цистерну водою."
-        )
+        # Запускаем живой поиск по сайту
+        online_result = parse_vagon_by(text)
+        if online_result:
+            bot.send_message(message.chat.id, online_result, parse_mode="Markdown", disable_web_page_preview=True)
+        else:
+            bot.send_message(message.chat.id, f"❌ Не вдалося знайти модель `{text}` автоматично. Перевірте правильність написання (наприклад, 15-1443).", parse_mode="Markdown")
+        return
+
+    # Стандартные ответы на тесты (как в версии 1.0)
+    if text == "328":
+        response = "📋 **Аварійна картка №328**\n\n• **Вантаж:** Гази вуглеводневі зріджені\n• **Дії:** Евакуація 800м."
         bot.send_message(message.chat.id, response, parse_mode="Markdown")
-        
-    # Приклад пошуку за UN 1075
-    elif text.upper() in ["UN 1075", "1075"]:
-        response = (
-            "☣️ **Інформація про вантаж (ООН 1075)**\n\n"
-            "• **Назва:** Зріджені вуглеводневі гази (СУГ)\n"
-            "• **Клас небезпеки:** 2 (Гази)\n"
-            "• **Код небезпеки (КЕМ):** 23 (Займистий газ)"
-        )
+    elif text in ["1075", "UN 1075"]:
+        response = "☣️ **ООН 1075**\n\n• **Назва:** Зріджені вуглеводневі гази (СУГ)"
         bot.send_message(message.chat.id, response, parse_mode="Markdown")
-        
     else:
-        bot.send_message(message.chat.id, "Я вас не зрозумів. Скористайтеся меню або введіть коректний номер (наприклад, 328 або 1075).")
+        bot.send_message(message.chat.id, "Скористайтеся кнопками меню або введіть модель цистерни з дефісом (наприклад, 15-1443).")
 
-# Обробка надісланих фото
-@bot.message_handler(content_types=['photo'])
-def handle_photo(message):
-    bot.send_message(message.chat.id, "Фото отримано! 🔄 Аналізую зображення вагона...")
-    # Тут пізніше буде код для розпізнавання (OCR / AI)
-    demo_response = (
-        "📊 **Результат розпізнавання (Демо):**\n"
-        "• **Модель цистерны:** 15-150-04\n"
-        "• **Об'єм:** 54 м³\n"
-        "• **Вантажопідйомність:** 66 т\n"
-        "• **Рік побудови:** 2018"
-    )
-    bot.send_message(message.chat.id, demo_response, parse_mode="Markdown")
-
-# Запуск бота
 if __name__ == '__main__':
-    print("Бот успішно запущений...")
     bot.infinity_polling()
