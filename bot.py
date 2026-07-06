@@ -6,6 +6,17 @@ from bs4 import BeautifulSoup
 TOKEN = "8816399169:AAEeCdexznbCh4vTKqBWqE8gRYTqWIspWV0"
 bot = telebot.TeleBot(TOKEN)
 
+# Список главных кнопок, чтобы бот понимал, когда пользователь передумал и нажал меню
+MENU_BUTTONS = [
+    "📄 Аварійні картки", 
+    "☣️ Небезпечні вантажі (UN)", 
+    "🚛 Вагони та цистерни", 
+    "🔢 Пошук за номером вагона",
+    "📷 Розпізнати фото",
+    "🧮 Калькулятор",
+    "❓ Запитати ШІ"
+]
+
 # ================= 1. ФУНКЦІЇ ПОШУКУ ТА ПАРСИНГУ =================
 def parse_vagon_by(model_name):
     clean_model = model_name.strip()
@@ -82,7 +93,7 @@ def get_wagon_type_by_number(number_str):
         f"🔢 **Аналіз вагона № {number_str}**\n\n"
         f"• {checksum_status}\n"
         f"• **Рід вагона:** {type_desc}\n\n"
-        f"🔗 [Переглянути власника на vagon.by]({url})"
+        f"🔗 [Переглянути деталі на vagon.by]({url})"
     )
 
 # ================= 2. СТВОРЕННЯ КНОПОК МЕНЮ =================
@@ -101,11 +112,19 @@ def get_main_menu():
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.send_message(message.chat.id, "🚆 **ЖД Помічник UA** готовий до роботи! Оновлене меню активовано.", reply_markup=get_main_menu(), parse_mode="Markdown")
+    bot.send_message(
+        message.chat.id, 
+        "🚆 **ЖД Помічник UA** готовий до роботи!\nОновлене повне меню активовано.", 
+        reply_markup=get_main_menu(), 
+        parse_mode="Markdown"
+    )
 
 # ================= 3. ОБРОБКА НАВІГАЦІЇ МЕНЮ =================
 @bot.message_handler(content_types=['text'])
 def handle_text(message):
+    route_menu(message)
+
+def route_menu(message):
     text = message.text.strip()
 
     if text == "📄 Аварійні картки":
@@ -136,19 +155,28 @@ def handle_text(message):
 
     bot.send_message(message.chat.id, "Будь ласка, скористайтеся кнопками меню для вибору розділу.")
 
-# ================= 4. КРОКИ ОБРОБКИ ВВОДУ =================
+# ================= 4. КРОКИ ОБРОБКИ ВВОДУ (З ЗАХИСТОМ) =================
 def process_wagon_search(message):
+    if message.text in MENU_BUTTONS:
+        route_menu(message)
+        return
     model = message.text.strip()
     bot.send_message(message.chat.id, f"🔍 Шукаю модель `{model}` на vagon.by...", parse_mode="Markdown")
     result = parse_vagon_by(model)
     bot.send_message(message.chat.id, result, parse_mode="Markdown", disable_web_page_preview=True)
 
 def process_number_search(message):
+    if message.text in MENU_BUTTONS:
+        route_menu(message)
+        return
     num = message.text.strip()
     result = get_wagon_type_by_number(num)
     bot.send_message(message.chat.id, result, parse_mode="Markdown", disable_web_page_preview=True)
 
 def process_emergency_card(message):
+    if message.text in MENU_BUTTONS:
+        route_menu(message)
+        return
     card = message.text.strip()
     if card == "328":
         bot.send_message(message.chat.id, "📋 **Аварійна картка №328**\n\n• **Вантаж:** Гази вуглеводневі зріджені\n• **Дії:** Евакуація 800м.", parse_mode="Markdown")
@@ -156,6 +184,9 @@ def process_emergency_card(message):
         bot.send_message(message.chat.id, f"Картку №{card} не знайдено в демо-базі.")
 
 def process_un_number(message):
+    if message.text in MENU_BUTTONS:
+        route_menu(message)
+        return
     un = message.text.strip()
     if un == "1075":
         bot.send_message(message.chat.id, "☣️ **ООН 1075**\n\n• **Назва:** Зріджені вуглеводневі гази (СУГ).", parse_mode="Markdown")
@@ -164,4 +195,3 @@ def process_un_number(message):
 
 if __name__ == '__main__':
     bot.infinity_polling()
-
