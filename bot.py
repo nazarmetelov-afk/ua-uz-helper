@@ -3,10 +3,10 @@ from telebot import types
 import requests
 from bs4 import BeautifulSoup
 
-TOKEN = 8816399169:"AAEeCdexznbCh4vTKqBWqE8gRYTqWIspWV0"
+TOKEN = "8816399169:AAEeCdexznbCh4vTKqBWqE8gRYTqWIspWV0"
 bot = telebot.TeleBot(TOKEN)
 
-# ================= 1. ФУНКЦИЯ ПАРСИНГА МОДЕЛЕЙ С САЙТА =================
+# ================= 1. ФУНКЦІЇ ПОШУКУ ТА ПАРСИНГУ =================
 def parse_vagon_by(model_name):
     clean_model = model_name.strip()
     url = f"https://vagon.by/model/{clean_model}"
@@ -41,17 +41,13 @@ def parse_vagon_by(model_name):
         
         return f"🚛 **{title}**\n\nНе вдалося автоматично зчитати характеристики.\n🔗 {url}"
     except Exception as e:
-        return f"❌ Помилка підключення до сайту.\n🔗 Спробуйте вручную: {url}"
+        return f"❌ Помилка підключення до сайту.\n🔗 Спробуйте вручну: {url}"
 
-
-# ================= 2. ФУНКЦИЯ РАСШИФРОВКИ 8-ЗНАЧНОГО НОМЕРА =================
 def get_wagon_type_by_number(number_str):
     if not number_str.isdigit() or len(number_str) != 8:
         return "⚠️ Номер вагона має складатися рівно з 8 цифр."
     
     first_digit = number_str[0]
-    
-    # Алгоритм проверки контрольного числа
     weights = [2, 1, 2, 1, 2, 1, 2]
     total_sum = 0
     for i in range(7):
@@ -66,11 +62,11 @@ def get_wagon_type_by_number(number_str):
     if int(number_str[7]) == correct_checksum:
         checksum_status = "✅ **Номер коректний** (контрольне число збігається)."
     else:
-        checksum_status = f"❌ **Помилка в номері!** Контрольна цифра має бути `{correct_checksum}`, а введено `{number_str[7]}`."
+        checksum_status = f"❌ **Помилка!** Контрольна цифра має бути `{correct_checksum}`, а введено `{number_str[7]}`."
 
     wagon_types = {
         '2': "🏠 **Критий вагон**",
-        '4': "Platforma **Платформа**",
+        '4': "📦 **Платформа**",
         '6': "🗑️ **Піввагон (Полувагон)**",
         '7': "⚡ **Цистерна**",
         '8': "❄️ **Ізотермічний вагон**",
@@ -86,25 +82,28 @@ def get_wagon_type_by_number(number_str):
         f"🔢 **Аналіз вагона № {number_str}**\n\n"
         f"• {checksum_status}\n"
         f"• **Рід вагона:** {type_desc}\n\n"
-        f"🔗 [Переглянути власника та деталі на vagon.by]({url})"
+        f"🔗 [Переглянути власника на vagon.by]({url})"
     )
 
-
-# ================= 3. ЛОГИКА МЕНЮ И КНОПОК =================
+# ================= 2. СТВОРЕННЯ КНОПОК МЕНЮ =================
 def get_main_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add(
         types.KeyboardButton("📄 Аварійні картки"),
         types.KeyboardButton("☣️ Небезпечні вантажі (UN)"),
         types.KeyboardButton("🚛 Вагони та цистерни"),
-        types.KeyboardButton("🔢 Пошук за номером вагона")
+        types.KeyboardButton("🔢 Пошук за номером вагона"),
+        types.KeyboardButton("📷 Розпізнати фото"),
+        types.KeyboardButton("🧮 Калькулятор"),
+        types.KeyboardButton("❓ Запитати ШІ")
     )
     return markup
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.send_message(message.chat.id, "🚆 **ЖД Помічник UA** готовий до роботи!", reply_markup=get_main_menu(), parse_mode="Markdown")
+    bot.send_message(message.chat.id, "🚆 **ЖД Помічник UA** готовий до роботи! Оновлене меню активовано.", reply_markup=get_main_menu(), parse_mode="Markdown")
 
+# ================= 3. ОБРОБКА НАВІГАЦІЇ МЕНЮ =================
 @bot.message_handler(content_types=['text'])
 def handle_text(message):
     text = message.text.strip()
@@ -113,26 +112,31 @@ def handle_text(message):
         msg = bot.send_message(message.chat.id, "Введіть номер аварійної картки (наприклад, 328):")
         bot.register_next_step_handler(msg, process_emergency_card)
         return
-        
     elif text == "☣️ Небезпечні вантажі (UN)":
         msg = bot.send_message(message.chat.id, "Введіть номер ООН (наприклад, 1075):")
         bot.register_next_step_handler(msg, process_un_number)
         return
-        
     elif text == "🚛 Вагони та цистерни":
-        msg = bot.send_message(message.chat.id, "Введіть **будь-який** номер моделі вагона (наприклад: `15-1443`, `11-280`):", parse_mode="Markdown")
+        msg = bot.send_message(message.chat.id, "Введіть **номер моделі** вагона (наприклад: `15-1443`):", parse_mode="Markdown")
         bot.register_next_step_handler(msg, process_wagon_search)
         return
-        
     elif text == "🔢 Пошук за номером вагона":
         msg = bot.send_message(message.chat.id, "Введіть **8-значний номер** вагона для аналізу:")
         bot.register_next_step_handler(msg, process_number_search)
         return
+    elif text == "📷 Розпізнати фото":
+        bot.send_message(message.chat.id, "🛠️ Функція розпізнавання фото трафаретів та номерів за допомогою комп'ютерного зору знаходиться у розробці.")
+        return
+    elif text == "🧮 Калькулятор":
+        bot.send_message(message.chat.id, "🧮 Розрахунок ступенів негабаритності або залізничних тарифів буде додано у наступних оновленнях.")
+        return
+    elif text == "❓ Запитати ШІ":
+        bot.send_message(message.chat.id, "🤖 Модуль штучного інтелекту для консультацій щодо інструкцій ЦД, ЦТ та ЦВ наразі підключається.")
+        return
 
-    bot.send_message(message.chat.id, "Будь ласка, скористайтеся кнопками меню.")
+    bot.send_message(message.chat.id, "Будь ласка, скористайтеся кнопками меню для вибору розділу.")
 
-
-# ================= 4. ОБРАБОТЧИКИ ШАГОВ ВВОДА =================
+# ================= 4. КРОКИ ОБРОБКИ ВВОДУ =================
 def process_wagon_search(message):
     model = message.text.strip()
     bot.send_message(message.chat.id, f"🔍 Шукаю модель `{model}` на vagon.by...", parse_mode="Markdown")
@@ -160,3 +164,4 @@ def process_un_number(message):
 
 if __name__ == '__main__':
     bot.infinity_polling()
+
